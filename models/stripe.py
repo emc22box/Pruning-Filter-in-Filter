@@ -31,11 +31,11 @@ class FilterStripe(nn.Conv2d):
         else:
             return F.conv2d(x, self.weight * self.FilterSkeleton.unsqueeze(1), stride=self.stride, padding=self.padding, groups=self.groups)
 
-    def prune_in(self, in_mask=None):
+    def prune_in(self, in_mask=None):#修剪对应前一层被删除的Cout的通道
         self.weight = Parameter(self.weight[:, in_mask])
         self.in_channels = in_mask.sum().item()
 
-    def prune_out(self, threshold):
+    def prune_out(self, threshold):#修剪条带被全部删除的骨架
         out_mask = (self.FilterSkeleton.abs() > threshold).sum(dim=(1, 2)) != 0
         self.weight = Parameter(self.weight[out_mask])
         self.FilterSkeleton = Parameter(self.FilterSkeleton[out_mask], requires_grad=True)
@@ -43,15 +43,16 @@ class FilterStripe(nn.Conv2d):
         return out_mask
 
     def _break(self, threshold):
-        self.weight = Parameter(self.weight * self.FilterSkeleton.unsqueeze(1))
+        self.weight = Parameter(self.weight * self.FilterSkeleton.unsqueeze(1))#也许weight是Cout，Cin，H，W
         self.FilterSkeleton = Parameter((self.FilterSkeleton.abs() > threshold), requires_grad=False)
         self.out_channels = self.FilterSkeleton.sum().item()
         self.BrokenTarget = self.FilterSkeleton.sum(dim=0)
         self.kernel_size = (1, 1)
+        #                                        H W Cout Cin                                                             H W Cout              
         self.weight = Parameter(self.weight.permute(2, 3, 0, 1).reshape(-1, self.in_channels, 1, 1)[self.FilterSkeleton.permute(1, 2, 0).reshape(-1)])
 
     def update_skeleton(self, sr, threshold):
-        self.FilterSkeleton.grad.data.add_(sr * torch.sign(self.FilterSkeleton.data))
+        self.FilterSkeleton.grad.data.add_(sr * torch.sign(self.FilterSkeleton.data))#L1 norm惩罚
         mask = self.FilterSkeleton.data.abs() > threshold
         self.FilterSkeleton.data.mul_(mask)
         self.FilterSkeleton.grad.data.mul_(mask)
