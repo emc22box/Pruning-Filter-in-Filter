@@ -22,6 +22,7 @@ class VGG(nn.Module):
     def forward(self, x):
         out = self.features(x)
         out = out.view(out.size(0), -1)
+        #
         out = self.classifier(out)
         return out
 
@@ -36,6 +37,7 @@ class VGG(nn.Module):
                            BatchNorm(x),
                            nn.ReLU(inplace=True)]
                 in_channels = x
+        #
         layers += [nn.AvgPool2d(kernel_size=1, stride=1)]
         return nn.Sequential(*layers)
 
