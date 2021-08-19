@@ -17,38 +17,41 @@ class FilterStripe(nn.Conv2d):
 
     def forward(self, x):
         if self.BrokenTarget is not None:
+            #out：N Cout Hout Wout
             out = torch.zeros(x.shape[0], self.FilterSkeleton.shape[0], int(np.ceil(x.shape[2] / self.stride[0])), int(np.ceil(x.shape[3] / self.stride[1])))
+            #x：N Cin Hx Wx
             if x.is_cuda:
                 out = out.cuda()
-            x = F.conv2d(x, self.weight)
+            x = F.conv2d(x, self.weight)   #x：N HWCout Hx Wx（如图4）
             l, h = 0, 0
             for i in range(self.BrokenTarget.shape[0]):
                 for j in range(self.BrokenTarget.shape[1]):
                     h += self.FilterSkeleton[:, i, j].sum().item()
+                    #这里out的计算方式与图示不符，每次累加一个条带上的各非0channel
                     out[:, self.FilterSkeleton[:, i, j]] += self.shift(x[:, l:h], i, j)[:, :, ::self.stride[0], ::self.stride[1]]
                     l += self.FilterSkeleton[:, i, j].sum().item()
             return out
         else:
             return F.conv2d(x, self.weight * self.FilterSkeleton.unsqueeze(1), stride=self.stride, padding=self.padding, groups=self.groups)
 
-    def prune_in(self, in_mask=None):#修剪对应前一层被删除的Cout的通道
-        self.weight = Parameter(self.weight[:, in_mask])
-        self.in_channels = in_mask.sum().item()
+    def prune_in(self, in_mask=None):
+        self.weight = Parameter(self.weight[:, in_mask])   #修剪对应前一层被删除的Cout的Cin通道
+        self.in_channels = in_mask.sum().item()   #更新Cin通道数量
 
-    def prune_out(self, threshold):#修剪条带被全部删除的骨架
-        out_mask = (self.FilterSkeleton.abs() > threshold).sum(dim=(1, 2)) != 0
-        self.weight = Parameter(self.weight[out_mask])
-        self.FilterSkeleton = Parameter(self.FilterSkeleton[out_mask], requires_grad=True)
-        self.out_channels = out_mask.sum().item()
+    def prune_out(self, threshold):
+        out_mask = (self.FilterSkeleton.abs() > threshold).sum(dim=(1, 2)) != 0   #计算条带被全部删除的通道的掩码
+        self.weight = Parameter(self.weight[out_mask])   #删除权重对应的Cout通道
+        self.FilterSkeleton = Parameter(self.FilterSkeleton[out_mask], requires_grad=True)   #删除条带被全部删除的骨架
+        self.out_channels = out_mask.sum().item()   #更新Cout通道
         return out_mask
 
     def _break(self, threshold):
-        self.weight = Parameter(self.weight * self.FilterSkeleton.unsqueeze(1))#也许weight是Cout，Cin，H，W
-        self.FilterSkeleton = Parameter((self.FilterSkeleton.abs() > threshold), requires_grad=False)
-        self.out_channels = self.FilterSkeleton.sum().item()
-        self.BrokenTarget = self.FilterSkeleton.sum(dim=0)
+        self.weight = Parameter(self.weight * self.FilterSkeleton.unsqueeze(1))   #weight：Cout，Cin，H，W
+        self.FilterSkeleton = Parameter((self.FilterSkeleton.abs() > threshold), requires_grad=False)   #计算条带掩码
+        self.out_channels = self.FilterSkeleton.sum().item()   #全部条带数量
+        self.BrokenTarget = self.FilterSkeleton.sum(dim=0)   #BrokenTarget：H W
         self.kernel_size = (1, 1)
-        #                                        H W Cout Cin                                                             H W Cout              
+        #这里数据排列与图示不符                      H W Cout Cin             HWCout，Cin，1,1                              H W Cout              
         self.weight = Parameter(self.weight.permute(2, 3, 0, 1).reshape(-1, self.in_channels, 1, 1)[self.FilterSkeleton.permute(1, 2, 0).reshape(-1)])
 
     def update_skeleton(self, sr, threshold):
