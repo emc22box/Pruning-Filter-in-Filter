@@ -49,7 +49,7 @@ class VGG(nn.Module):
                 m.update_mask(out_mask)
 
     def prune(self, threshold):
-        in_mask = torch.ones(3) > 0
+        in_mask = torch.ones(3) > 0   #初始输入3通道
         for key, m in self.named_modules():
             if isinstance(m, FilterStripe):
                 m.prune_in(in_mask)
