@@ -22,7 +22,7 @@ class FilterStripe(nn.Conv2d):
             #x：N Cin Hx Wx
             if x.is_cuda:
                 out = out.cuda()
-            x = F.conv2d(x, self.weight)   #x：N HWCout Hx Wx（如图4）
+            x = F.conv2d(x, self.weight)   #x：N k Hx Wx（如图4）k<HWCout因为已经稀疏重组了
             l, h = 0, 0
             for i in range(self.BrokenTarget.shape[0]):
                 for j in range(self.BrokenTarget.shape[1]):
