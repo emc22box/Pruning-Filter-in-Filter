@@ -27,7 +27,7 @@ class FilterStripe(nn.Conv2d):
             for i in range(self.BrokenTarget.shape[0]):
                 for j in range(self.BrokenTarget.shape[1]):
                     h += self.FilterSkeleton[:, i, j].sum().item()
-                    #这里out的计算方式与图示不符，每次累加一个条带上的各非0channel
+                    #这里out的计算方式与图示不符，每次累加一个条带上的各非0channel，目的应该是节省index
                     out[:, self.FilterSkeleton[:, i, j]] += self.shift(x[:, l:h], i, j)[:, :, ::self.stride[0], ::self.stride[1]]
                     l += self.FilterSkeleton[:, i, j].sum().item()
             return out
@@ -63,6 +63,7 @@ class FilterStripe(nn.Conv2d):
         return out_mask
 
     def shift(self, x, i, j):
+        #补0和删除，使得最终累加效果等同于带padding的卷积；多余计算确实存在，在这一步被删除了，如果不考虑padding，多余的计算更多
         return F.pad(x, (self.BrokenTarget.shape[0] // 2 - j, j - self.BrokenTarget.shape[0] // 2, self.BrokenTarget.shape[0] // 2 - i, i - self.BrokenTarget.shape[1] // 2), 'constant', 0)
 
     def extra_repr(self):
